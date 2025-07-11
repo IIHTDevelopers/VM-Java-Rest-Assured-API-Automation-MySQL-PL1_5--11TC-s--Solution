@@ -1,479 +1,607 @@
-package testcases;
+package rest;
 
-import io.github.bonigarcia.wdm.WebDriverManager;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
+import java.util.Set;
+
 import io.restassured.RestAssured;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
-import rest.ApiUtil;
-import rest.CustomResponse;
 
-import org.testng.annotations.BeforeClass;
-import org.testng.annotations.Test;
-
-import coreUtilities.utils.FileOperations;
-
-import static org.testng.Assert.assertEquals;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.openqa.selenium.By;
-import org.openqa.selenium.Cookie;
-import org.openqa.selenium.WebDriver;
-
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.testng.Assert;
-
-public class RestAssured_TestCases {
-
-	private static String baseUrl;
-	private static String username;
-	private static String password;
-	private static String cookieValue = null;
-	private ApiUtil apiUtil;
-	int payGradeId;
-	@SuppressWarnings("unused")
-	private int userIdToDelete;
-	private String apiUtilPath = System.getProperty("user.dir") + "\\src\\main\\java\\rest\\ApiUtil.java";
-	private String excelPath = System.getProperty("user.dir") + "\\src\\main\\resources\\testData.xlsx";
-	FileOperations excel = new FileOperations();
+public class ApiUtil {
+	private static final Set<Integer> usedNumbers = new HashSet<>();
+	private static final Random random = new Random();
+	private static String BASE_URL;
+	Properties prop;
 
 	/**
-	 * @BeforeClass method to perform login via Selenium and retrieve session cookie
-	 *              for authenticated API calls.
-	 * 
-	 *              Steps: 1. Setup ChromeDriver using WebDriverManager. 2. Launch
-	 *              browser and open the OrangeHRM login page. 3. Perform login with
-	 *              provided username and password. 4. Wait for login to complete
-	 *              and extract the 'orangehrm' session cookie. 5. Store the cookie
-	 *              value to be used in API requests. 6. Quit the browser session.
-	 * 
-	 *              Throws: - InterruptedException if thread sleep is interrupted. -
-	 *              RuntimeException if the required session cookie is not found.
+	 * Retrieves the base URL from the configuration properties file.
+	 *
+	 * <p>
+	 * This method loads the properties from the file located at
+	 * <code>{user.dir}/src/main/resources/config.properties</code> and extracts the
+	 * value associated with the key <code>base.url</code>. The value is stored in
+	 * the static variable <code>BASE_URL</code> and returned.
+	 *
+	 * @return the base URL string if successfully read from the properties file;
+	 *         {@code null} if an I/O error occurs while reading the file.
+	 */
+	public String getBaseUrl() {
+		prop = new Properties();
+		try (FileInputStream fis = new FileInputStream(
+				System.getProperty("user.dir") + "\\src\\main\\resources\\config.properties")) {
+			prop.load(fis);
+			BASE_URL = prop.getProperty("base.url");
+			return BASE_URL;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	/**
+	 * Retrieves the username from the configuration properties file.
+	 *
+	 * <p>
+	 * This method reads the properties from the file located at
+	 * <code>{user.dir}/src/main/resources/config.properties</code> and returns the
+	 * value associated with the key <code>username</code>.
+	 *
+	 * @return the username as a {@code String} if found in the properties file;
+	 *         {@code null} if an I/O error occurs while reading the file.
+	 */
+	public String getUsername() {
+		prop = new Properties();
+		try (FileInputStream fis = new FileInputStream(
+				System.getProperty("user.dir") + "\\src\\main\\resources\\config.properties")) {
+			prop.load(fis);
+			return prop.getProperty("username");
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	public String getPassword() {
+		prop = new Properties();
+		try (FileInputStream fis = new FileInputStream(
+				System.getProperty("user.dir") + "\\src\\main\\resources\\config.properties")) {
+			prop.load(fis);
+			return prop.getProperty("password");
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	/**
+	 * Retrieves the password from the configuration properties file.
+	 *
+	 * <p>
+	 * This method loads the properties from the file located at
+	 * <code>{user.dir}/src/main/resources/config.properties</code> and returns the
+	 * value associated with the key <code>password</code>.
+	 *
+	 * @return the password as a {@code String} if found in the properties file;
+	 *         {@code null} if an I/O error occurs while reading the file.
+	 */
+	public static String generateUniqueName(String base) {
+		int uniqueNumber;
+		do {
+			uniqueNumber = 1000 + random.nextInt(9000);
+		} while (usedNumbers.contains(uniqueNumber));
+
+		usedNumbers.add(uniqueNumber);
+		return base + uniqueNumber;
+	}
+
+	public static int generateUniqueID(int base) {
+		int uniqueNumber;
+		do {
+			uniqueNumber = 1000 + random.nextInt(9000);
+		} while (usedNumbers.contains(uniqueNumber));
+
+		usedNumbers.add(uniqueNumber);
+		return base + uniqueNumber;
+	}
+
+	/**
+	 * Sends a GET request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method uses RestAssured to construct and send a GET request to the given
+	 * endpoint. It attaches a cookie named <code>orangehrm</code> with the provided
+	 * value and sets the <code>Content-Type</code> header to
+	 * <code>application/json</code>. If a request body is provided, it is included
+	 * in the request.
+	 *
+	 * @param endpoint    the API endpoint to send the request to (relative to the
+	 *                    base URL)
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie to include
+	 *                    in the request
+	 * @param body        a map containing key-value pairs to be sent as the JSON
+	 *                    request body (can be null)
+	 * @return the response received from the GET request
 	 */
 
-	@Test(priority = 0, groups = {
-			"PL1" }, description = "Login to OrangeHRM using Selenium and retrieve session cookie")
-	public void loginWithSeleniumAndGetCookie() throws InterruptedException {
-		WebDriverManager.chromedriver().setup();
-		WebDriver driver = new ChromeDriver();
+	public CustomResponse getSubunitsTree(String endpoint, String cookieValue, Map<String, String> body) {
 
-		apiUtil = new ApiUtil();
-		baseUrl = apiUtil.getBaseUrl();
-		username = apiUtil.getUsername();
-		password = apiUtil.getPassword();
-
-		driver.get(baseUrl + "/web/index.php/auth/login");
-		Thread.sleep(3000); // Wait for page load
-
-		// Login to the app
-		driver.findElement(By.name("username")).sendKeys(username);
-		driver.findElement(By.name("password")).sendKeys(password);
-		driver.findElement(By.cssSelector("button[type='submit']")).click();
-		Thread.sleep(6000); // Wait for login
-
-		// Extract cookie named "orangehrm"
-		Set<Cookie> cookies = driver.manage().getCookies();
-		for (Cookie cookie : cookies) {
-			if (cookie.getName().equals("orangehrm")) {
-				cookieValue = cookie.getValue();
-				break;
-			}
-		}
-
-		driver.quit();
-
-		if (cookieValue == null) {
-			throw new RuntimeException("orangehrm cookie not found after login");
-		}
-	}
-
-	@Test(priority = 1, groups = {
-			"PL1" }, description = "1. Send a GET request to the '/web/index.php/api/v2/admin/subunits?mode=tree' endpoint with a valid cookie\n"
-					+ "2. Do not pass any request body (null)\n"
-					+ "3. Validate the request uses proper Rest Assured methods (given, cookie, get, response)\n"
-					+ "4. Validate that the response contains non-empty 'id' and 'name' fields in the 'data' list\n"
-					+ "5. Validate response status code is 200 and status line is 'HTTP/1.1 200 OK'\n"
-					+ "6. Print the full response body for verification")
-
-	public void getSubunitsTree() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/subunits?mode=tree";
-
-		CustomResponse customResponse = apiUtil.getSubunitsTree(endpoint, cookieValue, null);
-
-		// Step 1: Validate that method uses proper Rest Assured calls
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "getSubunitsTree",
-				List.of("given", "cookie", "get", "response"));
-		List<Object> itemIds = customResponse.getIds();
-		List<Object> names = customResponse.getNames();
-		Assert.assertFalse(itemIds.isEmpty(), "ID list should not be empty.");
-		Assert.assertFalse(names.isEmpty(), "Name list should not be empty.");
-
-		Assert.assertTrue(isImplementationCorrect,
-				"GetHolidayData must be implemented using RestAssured methods only!");
-
-		Assert.assertTrue(TestCodeValidator.validateResponseFields("getSubunitsTree", customResponse),
-				"Response must contain all required fields");
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Status code should be 200.");
-
-		Assert.assertEquals(customResponse.getStatus(), "HTTP/1.1 200 OK", "Status should be OK.");
-
-		System.out.println("getSubunitsTree API Response:");
-		customResponse.getResponse().prettyPrint();
-	}
-
-//
-	@Test(priority = 2, groups = {
-			"PL1" }, description = "1. Send a GET request to the '/web/index.php/api/v2/admin/skills?limit=50&offset=0' endpoint with a valid cookie\n"
-					+ "2. Do not pass any request body (null)\n"
-					+ "3. Validate that the method uses Rest Assured methods: given, cookie, get, response\n"
-					+ "4. Assert that the 'data' array in the response contains non-empty 'id' and 'name' fields\n"
-					+ "5. Validate response status code is 200 and status line is 'HTTP/1.1 200 OK'\n"
-					+ "6. Print the complete API response body for verification")
-
-	public void getAdminSkills() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/skills?limit=50&offset=0";
-
-		CustomResponse customResponse = apiUtil.getAdminSkills(endpoint, cookieValue, null);
-
-		// Step 1: Validate that method uses proper Rest Assured calls
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "getAdminSkills",
-				List.of("given", "cookie", "get", "response"));
-		// response, statusCode, status, ids, names, descriptions
-		List<Object> itemIds = customResponse.getIds(); // id
-		List<Object> names = customResponse.getNames(); // date
-		Assert.assertFalse(itemIds.isEmpty(), "ID list should not be empty.");
-		Assert.assertFalse(names.isEmpty(), "Name list should not be empty.");
-
-		Assert.assertTrue(isImplementationCorrect,
-				"GetHolidayData must be implemented using RestAssured methods only!");
-
-		Assert.assertTrue(TestCodeValidator.validateResponseFields("getAdminSkills", customResponse),
-				"Response must contain all required fields");
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Status code should be 200.");
-
-		Assert.assertEquals(customResponse.getStatus(), "HTTP/1.1 200 OK", "Status should be OK.");
-
-		System.out.println("getAdminSkills API Response:");
-		customResponse.getResponse().prettyPrint();
-	}
-
-	@Test(priority = 3, groups = {
-			"PL1" }, description = "1. Send a GET request to the '/web/index.php/api/v2/admin/educations?limit=50&offset=0' endpoint with a valid cookie\n"
-					+ "2. Do not pass any request body (null)\n"
-					+ "3. Validate that the method uses Rest Assured methods: given, cookie, get, response\n"
-					+ "4. Assert that the 'data' array in the response contains non-empty 'id' and 'name' fields\n"
-					+ "5. Verify that the status code is 200 and status line is 'HTTP/1.1 200 OK'\n"
-					+ "6. Print the full API response body to the console for verification")
-
-	public void getAdminEdu() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/educations?limit=50&offset=0";
-
-		CustomResponse customResponse = apiUtil.getAdminEdu(endpoint, cookieValue, null);
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "getAdminEdu",
-				List.of("given", "cookie", "get", "response"));
-		List<Object> itemIds = customResponse.getIds(); // id
-		List<Object> names = customResponse.getNames(); // date
-		Assert.assertFalse(itemIds.isEmpty(), "ID list should not be empty.");
-		Assert.assertFalse(names.isEmpty(), "Name list should not be empty.");
-
-		Assert.assertTrue(isImplementationCorrect,
-				"GetHolidayData must be implemented using RestAssured methods only!");
-
-		Assert.assertTrue(TestCodeValidator.validateResponseFields("getAdminEdu", customResponse),
-				"Response must contain all required fields");
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Status code should be 200.");
-
-		Assert.assertEquals(customResponse.getStatus(), "HTTP/1.1 200 OK", "Status should be OK.");
-
-		System.out.println("getAdminEdu API Response:");
-		customResponse.getResponse().prettyPrint();
-
-	}
-
-	@Test(priority = 4, groups = {
-			"PL1" }, description = "1. Send a GET request to the '/web/index.php/api/v2/admin/licenses?limit=50&offset=0' endpoint with a valid cookie\n"
-					+ "2. Do not pass any request body (null)\n"
-					+ "3. Validate that the method uses Rest Assured methods: given, cookie, get, response\n"
-					+ "4. Assert that the 'data' array in the response contains non-empty 'id' and 'name' fields\n"
-					+ "5. Verify the status code is 200 and the status line is 'HTTP/1.1 200 OK'\n"
-					+ "6. Print the full API response body for verification")
-
-	public void getAdminLicenses() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/licenses?limit=50&offset=0";
-
-		CustomResponse customResponse = apiUtil.getAdminLicenses(endpoint, cookieValue, null);
-
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "getAdminLicenses",
-				List.of("given", "cookie", "get", "response"));
-
-		System.out.println("Status Code: " + customResponse.getStatus());
-		Assert.assertTrue(isImplementationCorrect,
-				"getAdminLicenses must be implementated using the Rest assured  methods only!");
-		assertEquals(customResponse.getStatusCode(), 200);
-
-		List<Object> itemIds = customResponse.getIds(); // id
-		List<Object> names = customResponse.getNames(); // date
-		Assert.assertFalse(itemIds.isEmpty(), "ID list should not be empty.");
-		Assert.assertFalse(names.isEmpty(), "Name list should not be empty.");
-
-		Assert.assertTrue(isImplementationCorrect,
-				"GetHolidayData must be implemented using RestAssured methods only!");
-
-		Assert.assertTrue(TestCodeValidator.validateResponseFields("getAdminEdu", customResponse),
-				"Response must contain all required fields");
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Status code should be 200.");
-
-		Assert.assertEquals(customResponse.getStatus(), "HTTP/1.1 200 OK", "Status should be OK.");
-
-		System.out.println("getAdminEdu API Response:");
-		customResponse.getResponse().prettyPrint();
-
-	}
-
-//
-	@Test(priority = 5, groups = {
-			"PL1" }, description = "1. Send a GET request to the '/web/index.php/api/v2/admin/languages?limit=50&offset=0' endpoint with a valid cookie\n"
-					+ "2. Do not pass any request body (null)\n"
-					+ "3. Validate that the method uses Rest Assured methods: given, cookie, get, response\n"
-					+ "4. Assert that the 'data' array in the response contains non-empty 'id' and 'name' fields\n"
-					+ "5. Verify the status code is 200 and the status line is 'HTTP/1.1 200 OK'\n"
-					+ "6. Print the full API response body for verification")
-
-	public void getAdminLanguages() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/licenses?limit=50&offset=0";
-
-		CustomResponse customResponse = apiUtil.getAdminLanguages(endpoint, cookieValue, null);
-
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "getAdminLanguages",
-				List.of("given", "cookie", "get", "response"));
-
-		System.out.println("Status Code: " + customResponse.getStatus());
-		Assert.assertTrue(isImplementationCorrect,
-				"getAdminLanguages must be implementated using the Rest assured  methods only!");
-		assertEquals(customResponse.getStatusCode(), 200);
-
-		List<Object> itemIds = customResponse.getIds(); // id
-		List<Object> names = customResponse.getNames(); // date
-		Assert.assertFalse(itemIds.isEmpty(), "ID list should not be empty.");
-		Assert.assertFalse(names.isEmpty(), "Name list should not be empty.");
-
-		Assert.assertTrue(isImplementationCorrect,
-				"getAdminLanguages must be implemented using RestAssured methods only!");
-
-		Assert.assertTrue(TestCodeValidator.validateResponseFields("getAdminLanguages", customResponse),
-				"Response must contain all required fields");
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Status code should be 200.");
-
-		Assert.assertEquals(customResponse.getStatus(), "HTTP/1.1 200 OK", "Status should be OK.");
-
-		System.out.println("getAdminLanguages API Response:");
-		customResponse.getResponse().prettyPrint();
-
-	}
-
-	@Test(priority = 6, dependsOnMethods = "loginWithSeleniumAndGetCookie", groups = {
-			"PL1" }, description = "1. Send a GET request to '/web/index.php/api/v2/admin/users' to fetch user list\n"
-					+ "2. Extract a valid user ID for deletion (excluding Admin)\n"
-					+ "3. Construct the DELETE request body with the extracted ID in format: {\"ids\": [id]}\n"
-					+ "4. Send a DELETE request to '/web/index.php/api/v2/admin/users' with a valid cookie and body\n"
-					+ "5. Assert that the status code is 200 and implementation uses only RestAssured methods")
-
-	public void deleteValidUsers() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/users?limit=50&offset=0&sortField=u.userName&sortOrder=ASC";
-		Response Iresponse = getUsersID(endpoint, cookieValue, null);
-
-		JsonPath jsonPath = Iresponse.jsonPath();
-		int userIdToDelete = jsonPath.getInt("data[1].id");
-
-		System.out.println("User ID to delete: " + userIdToDelete);
-
-		String deleteEndPoint = "/web/index.php/api/v2/admin/users";
-		String requestBody = "{\"ids\": [" + userIdToDelete + "]}";
-		System.out.println("This is the delete request body: " + requestBody);
-
-		// 🛠 FIXED: Pass the actual requestBody
-		CustomResponse customResponse = apiUtil.deleteValidUsers(deleteEndPoint, cookieValue, requestBody);
-
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "deleteValidUsers",
-				List.of("given", "cookie", "delete", "response"));
-
-		Assert.assertEquals(customResponse.getStatusCode(), 200, "Expected status code 200 for success.");
-		Assert.assertTrue(isImplementationCorrect,
-				"deleteValidUsers must be implemented using Rest Assured methods only!");
-
-		System.out.println("deleteValidUsers API Response:");
-		customResponse.getResponse().prettyPrint();
-	}
-
-	@Test(priority = 7, groups = { "PL1" }, description = "1. Generate a unique job title using a utility method\n"
-			+ "2. Create a JSON request body with the generated job title and additional required fields\n"
-			+ "3. Send a POST request to the '/web/index.php/api/v2/admin/job-titles' endpoint using a valid cookie\n"
-			+ "4. Print and verify the status code and response body\n"
-			+ "5. Assert that the status code is 200 and validate correct implementation using RestAssured methods")
-
-	public void postNewJobTitles() throws Exception {
-// this is used with the excel file;
-		FileOperations excel = new FileOperations();
-
-		Map<String, String> testData = excel.readExcelPOI(excelPath, "sheet4");
-		System.out.println(testData);
-		String titleName = testData.get("title");
-		String uniqueTitle = ApiUtil.generateUniqueName(titleName);
-
-		String endpoint = "/web/index.php/api/v2/admin/job-titles";
-
-		String requestBody = "{\r\n" + "  \"title\": \"" + uniqueTitle + "\",\n" + "  \"description\": \"abccde\",\r\n"
-				+ "  \"specification\": null,\r\n" + "  \"note\": \"\"\r\n" + "}\r\n" + "";
-
-		CustomResponse customResponse = apiUtil.postNewJobTitles(endpoint, cookieValue, requestBody);
-
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "postNewJobTitles",
-				List.of("given", "cookie", "post", "response"));
-
-		System.out.println("Status Code: " + customResponse.getStatusCode());
-		System.out.println("Response Body: " + customResponse.getTitle2());
-		Assert.assertTrue(isImplementationCorrect,
-				"postNewJobTitles must be implementated using the Rest assured  methods only!");
-		assertEquals(customResponse.getStatusCode(), 200);
-		System.out.println("postNewJobTitles API Response:");
-		customResponse.getResponse().prettyPrint();
-	}
-
-	@SuppressWarnings("unchecked")
-	@Test(priority = 8, groups = {
-			"PL1" }, description = "1. Prepare a JSON request body with updated job title details\n"
-					+ "2. Send a PUT request to the '/web/index.php/api/v2/admin/job-titles/22' endpoint using a valid cookie\n"
-					+ "3. Verify and assert that the response contains a non-empty list of titles and IDs\n"
-					+ "4. Print the status code and the full response body for verification\n"
-					+ "5. Assert that the status code is 200 (OK) and validate correct implementation using RestAssured methods")
-
-	public void putJobTitleByID() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/job-titles/22";
-		Map<String, String> testData = null;
-		try {
-
-			testData = excel.readExcelPOI(excelPath, "sheet4");
-		} catch (Exception e) {
-
-			System.out.println("sheet data not found");
-
-			e.printStackTrace();
-		}
-
-		String titleData = testData.get("putTitle");
-
-		String requestBody = "{ \"title\": \"" + titleData + "\", \"description\": null, \"note\": null }";
-
-		CustomResponse customResponse = apiUtil.putJobTitleByID(endpoint, cookieValue, requestBody);
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath, "putJobTitleByID",
-				List.of("given", "cookie", "put", "response"));
-		List<Object> title = (List<Object>) customResponse.getTitles(); // date
-		Assert.assertFalse(title.isEmpty(), "ID list should not be empty.");
-		List<Object> id = customResponse.getIdss();
-		Assert.assertFalse(id.isEmpty(), "ID list should not be empty.");
-
-		// Assertions
-		System.out.println("Status Code: " + customResponse.getStatusCode());
-		Assert.assertTrue(isImplementationCorrect,
-				"putJobTitleByID must be implementated using the Rest assured  methods only!");
-		assertEquals(customResponse.getStatusCode(), 200);
-		System.out.println("putJobTitleByID API Response:");
-		customResponse.getResponse().prettyPrint();
-	}
-
-	@Test(priority = 9, groups = {
-			"PL1" }, description = "1. Dynamically generate a unique pay grade name using a helper method\n"
-					+ "2. Send a POST request to the '/web/index.php/api/v2/admin/pay-grades' endpoint with a valid cookie and the generated name in the request body\n"
-					+ "3. Extract and store the ID and name of the newly created pay grade from the response\n"
-					+ "4. Print the generated ID, name, request body, status code, and response body for verification\n"
-					+ "5. Assert that ID and name are not null\n"
-					+ "6. Assert that the status code is 200 and validate implementation correctness using RestAssured methods")
-
-	public void postUniquePaygrade() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/pay-grades";
-		Map<String, String> testData = null;
-		try {
-			testData = excel.readExcelPOI(excelPath, "sheet4");
-
-		} catch (Exception e) {
-			System.out.println("sheet data not found");
-			e.printStackTrace();
-		}
-		String paygrade = testData.get("putTitle");
-		String uniqueName = ApiUtil.generateUniqueName(paygrade);
-
-		String requestBody = "{\n" + "  \"name\": \"" + uniqueName + "\"\n" + "}";
-		CustomResponse customResponse = apiUtil.postUniquePaygrade(endpoint, cookieValue, requestBody);
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath,
-				"postUniquePaygrade", List.of("given", "cookie", "post", "response"));
-		System.out.println("Status Code: " + customResponse.getStatusCode());
-		Object id = customResponse.getId2();
-		Object name = customResponse.getName();
-		payGradeId = (int) customResponse.getId2();
-		System.out.println("✅ ID: " + payGradeId);
-		System.out.println("✅ ID: " + id);
-		System.out.println("✅ Name: " + name);
-		System.out.println("id" + ' ' + "name");
-		if (id == null || name == null) {
-			throw new AssertionError("❌ 'id' or 'name' is null. Test failed.");
-
-		}
-		Assert.assertTrue(isImplementationCorrect,
-				"putJobTitleByID must be implementated using the Rest assured  methods only!");
-		System.out.println("postUniquePaygrade API Response:");
-		customResponse.getResponse().prettyPrint();
-
-	}
-
-	// delete method is not working because the data is not present on API .
-	@Test(priority = 10, dependsOnMethods = "postUniquePaygrade", groups = {
-			"PL1" }, description = "1. Retrieve the payGradeId stored from the previous test\n"
-					+ "2. Prepare the DELETE request body dynamically using the retrieved payGradeId\n"
-					+ "3. Send a DELETE request to the '/web/index.php/api/v2/admin/pay-grades' endpoint with a valid cookie\n"
-					+ "4. Verify that the request body is correctly passed\n"
-					+ "5. Print and verify the status code and response body\n"
-					+ "6. Assert that the status code is 200 and validate implementation correctness using RestAssured methods")
-
-	public void deletePaygradeById() throws IOException {
-		String endpoint = "/web/index.php/api/v2/admin/pay-grades";
-		int GradeId = payGradeId;
-		String requestBody = "{\"ids\": [" + GradeId + "]}";
-
-		CustomResponse customResponse = apiUtil.deletePaygradeById(endpoint, cookieValue, requestBody);
-
-		boolean isImplementationCorrect = TestCodeValidator.validateTestMethodFromFile(apiUtilPath,
-				"deletePaygradeById", List.of("given", "cookie", "delete", "response"));
-		String status = customResponse.getStatus();
-		Assert.assertTrue(isImplementationCorrect,
-				"putJobTitleByID must be implementated using the Rest assured  methods only!");
-		Assert.assertFalse(status.isEmpty(), "status should not be empty.");
-		System.out.println("deletePaygradeById API Response:");
-		customResponse.getResponse().prettyPrint();
-
-	}
-
-	/*----------------------------------------Helper Functions-----------------------------------------*/
-
-	public Response getUsersID(String endpoint, String cookieValue, Map<String, String> body) {
-		baseUrl = apiUtil.getBaseUrl();
 		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
 				"application/json");
 
-		// Only add the body if it's not null
 		if (body != null) {
 			request.body(body);
 		}
 
-		return request.get(baseUrl + endpoint).then().extract().response();
+		Response response = request.get(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> unitIds = new ArrayList<>();
+		List<Object> names = new ArrayList<>();
+		List<Object> levels = new ArrayList<>();
+		List<Object> children = new ArrayList<>();
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Map<String, Object>> data = jsonPath.getList("data");
+
+		if (data != null) {
+			for (Map<String, Object> unit : data) {
+				ids.add(unit.get("id"));
+				unitIds.add(unit.get("unitId"));
+				names.add(unit.get("name"));
+				levels.add(unit.get("level"));
+				children.add(unit.get("children")); // This can be nested list
+			}
+		} else {
+			System.out.println("⚠️ 'data' field is null in response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, unitIds, names, levels, children);
+	}
+
+	/**
+	 * Sends a GET request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a GET request using RestAssured, attaching a cookie
+	 * named <code>orangehrm</code> with the specified value and setting the
+	 * <code>Content-Type</code> header to <code>application/json</code>. If a body
+	 * is provided, it is included in the request.
+	 *
+	 * @param endpoint    the relative URL endpoint to send the GET request to
+	 * @param cookieValue the value for the <code>orangehrm</code> cookie
+	 * @param body        a map of key-value pairs representing the request body
+	 *                    (optional, may be null)
+	 * @return the response received from the GET request
+	 */
+	public CustomResponse getAdminSkills(String endpoint, String cookieValue, Map<String, String> body) {
+
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (body != null) {
+			request.body(body);
+		}
+
+		Response response = request.get(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> names = new ArrayList<>();
+		List<Object> descriptions = new ArrayList<>();
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Map<String, Object>> data = jsonPath.getList("data");
+
+		if (data != null) {
+			for (Map<String, Object> skill : data) {
+				ids.add(skill.get("id"));
+				names.add(skill.get("name"));
+				descriptions.add(skill.get("description"));
+			}
+		} else {
+			System.out.println("⚠️ 'data' field is null in response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, names, descriptions);
+	}
+
+	/**
+	 * Sends a GET request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a GET request using RestAssured, attaching a cookie
+	 * named <code>orangehrm</code> with the specified value and setting the
+	 * <code>Content-Type</code> header to <code>application/json</code>. If a body
+	 * is provided, it is included in the request.
+	 *
+	 * @param endpoint    the relative URL endpoint to send the GET request to
+	 * @param cookieValue the value for the <code>orangehrm</code> cookie
+	 * @param body        a map of key-value pairs representing the request body
+	 *                    (optional, may be null)
+	 * @return the response received from the GET request
+	 */
+	public CustomResponse getAdminEdu(String endpoint, String cookieValue, Map<String, String> body) {
+
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (body != null) {
+			request.body(body);
+		}
+
+		Response response = request.get(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> names = new ArrayList<>();
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Map<String, Object>> data = jsonPath.getList("data");
+
+		if (data != null) {
+			for (Map<String, Object> item : data) {
+				ids.add(item.get("id"));
+				names.add(item.get("name"));
+			}
+		} else {
+			System.out.println("⚠️ 'data' field is null in response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, names);
+	}
+
+	/**
+	 * Sends a GET request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a GET request using RestAssured, attaching a cookie
+	 * named <code>orangehrm</code> with the specified value and setting the
+	 * <code>Content-Type</code> header to <code>application/json</code>. If a body
+	 * is provided, it is included in the request.
+	 *
+	 * @param endpoint    the relative URL endpoint to send the GET request to
+	 * @param cookieValue the value for the <code>orangehrm</code> cookie
+	 * @param body        a map of key-value pairs representing the request body
+	 *                    (optional, may be null)
+	 * @return the response received from the GET request
+	 */
+	public CustomResponse getAdminLicenses(String endpoint, String cookieValue, Map<String, String> body) {
+
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (body != null) {
+			request.body(body);
+		}
+
+		Response response = request.get(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> names = new ArrayList<>();
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Map<String, Object>> data = jsonPath.getList("data");
+
+		if (data != null) {
+			for (Map<String, Object> item : data) {
+				ids.add(item.get("id"));
+				names.add(item.get("name"));
+			}
+		} else {
+			System.out.println("⚠️ 'data' field is null in response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, names);
+	}
+
+	/**
+	 * Sends a GET request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a GET request using RestAssured, attaching a cookie
+	 * named <code>orangehrm</code> with the specified value and setting the
+	 * <code>Content-Type</code> header to <code>application/json</code>. If a body
+	 * is provided, it is included in the request.
+	 *
+	 * @param endpoint    the relative URL endpoint to send the GET request to
+	 * @param cookieValue the value for the <code>orangehrm</code> cookie
+	 * @param body        a map of key-value pairs representing the request body
+	 *                    (optional, may be null)
+	 * @return the response received from the GET request
+	 */
+	public CustomResponse getAdminLanguages(String endpoint, String cookieValue, Map<String, String> body) {
+
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (body != null) {
+			request.body(body);
+		}
+
+		Response response = request.get(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> names = new ArrayList<>();
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Map<String, Object>> data = jsonPath.getList("data");
+
+		if (data != null) {
+			for (Map<String, Object> item : data) {
+				ids.add(item.get("id"));
+				names.add(item.get("name"));
+			}
+		} else {
+			System.out.println("⚠️ 'data' field is null in response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, names);
+	}
+
+	/**
+	 * Sends a GET request to the specified API endpoint with an authentication
+	 * cookie and optional body.
+	 *
+	 * <p>
+	 * This method utilizes RestAssured to perform a GET request to the provided
+	 * endpoint. It includes a cookie named <code>orangehrm</code> with the
+	 * specified value and sets the <code>Content-Type</code> to
+	 * <code>application/json</code>. If a request body is provided, it is attached
+	 * to the request.
+	 *
+	 * @param endpoint    the relative endpoint path to be appended to the base URL
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie for session
+	 *                    handling or authentication
+	 * @param body        a map containing request body parameters (optional; may be
+	 *                    null)
+	 * @return the {@code Response} object containing the results of the GET request
+	 */
+	public CustomResponse deleteValidUsers(String endpoint, String cookieValue, String requestBody) {
+
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (requestBody != null) {
+			request.body(requestBody);
+		}
+
+		Response response = request.delete(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		// Log full response
+		System.out.println("Delete API Response:");
+		response.prettyPrint();
+
+		return new CustomResponse(response, statusCode, status, null);
+	}
+
+	/**
+	 * Sends a POST request to the specified endpoint with a cookie and JSON string
+	 * payload.
+	 *
+	 * <p>
+	 * This method uses RestAssured to perform a POST request to the given endpoint.
+	 * It sets the <code>Content-Type</code> header to
+	 * <code>application/json</code>, includes a cookie named
+	 * <code>orangehrm</code>, and attaches the provided JSON string as the request
+	 * body.
+	 *
+	 * @param endpoint    the relative URL endpoint for the POST request, appended
+	 *                    to the base URL
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie used for
+	 *                    authentication or session handling
+	 * @param body        a JSON-formatted string representing the request payload
+	 * @return the {@link io.restassured.response.Response} object containing the
+	 *         server's response
+	 */
+	public CustomResponse postNewJobTitles(String endpoint, String cookieValue, String requestBody) {
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (requestBody != null) {
+			request.body(requestBody);
+		}
+
+		Response response = request.post(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		JsonPath jsonPath = response.jsonPath();
+		Map<String, Object> data = jsonPath.getMap("data");
+
+		Object title2 = null;
+
+		if (data != null) {
+
+			title2 = data.get("title");
+
+			System.out.println("✅ Title: " + title2);
+		} else {
+			System.out.println("❌ 'data' object is missing or empty in the response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, title2);
+	}
+
+	/**
+	 * Sends a PUT request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a PUT request using RestAssured, sets the
+	 * <code>Content-Type</code> header to <code>application/json</code>, and
+	 * includes a cookie named <code>orangehrm</code>. If a request body is
+	 * provided, it is attached to the request.
+	 *
+	 * @param endpoint    the relative endpoint to which the PUT request is sent,
+	 *                    appended to the base URL
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie for session
+	 *                    or authorization purposes
+	 * @param requestBody an object representing the request body (can be null)
+	 * @return the {@link io.restassured.response.Response} returned from the PUT
+	 *         request
+	 */
+	@SuppressWarnings("unchecked")
+	public CustomResponse putJobTitleByID(String endpoint, String cookieValue, String requestBody) {
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (requestBody != null) {
+			request.body(requestBody);
+		}
+
+		Response response = request.put(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		JsonPath jsonPath = response.jsonPath();
+		Map<String, Object> data = jsonPath.getMap("data");
+
+		List<Object> ids = new ArrayList<>();
+		List<Object> titles = new ArrayList<>();
+		Object description = null;
+		Object note = null;
+		Map<String, Object> jobSpecification = null;
+
+		if (data != null) {
+			ids.add(data.get("id"));
+			titles.add(data.get("title"));
+			description = data.get("description");
+			note = data.get("note");
+			jobSpecification = (Map<String, Object>) data.get("jobSpecification");
+		} else {
+			System.out.println("❌ 'data' object is missing or empty in the response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, ids, titles, description, note, jobSpecification);
+	}
+
+	/**
+	 * Sends a PUT request to the specified endpoint with a cookie and optional
+	 * request body.
+	 *
+	 * <p>
+	 * This method constructs a PUT request using RestAssured, sets the
+	 * <code>Content-Type</code> header to <code>application/json</code>, and
+	 * includes a cookie named <code>orangehrm</code>. If a request body is
+	 * provided, it is attached to the request.
+	 *
+	 * @param endpoint    the relative endpoint to which the PUT request is sent,
+	 *                    appended to the base URL
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie for session
+	 *                    or authorization purposes
+	 * @param body        an object representing the request body (can be null)
+	 * @return the {@link io.restassured.response.Response} returned from the PUT
+	 *         request
+	 */
+
+	public CustomResponse postUniquePaygrade(String endpoint, String cookieValue, String requestBody) {
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (requestBody != null) {
+			request.body(requestBody);
+		}
+
+		Response response = request.post(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+
+		JsonPath jsonPath = response.jsonPath();
+		Map<String, Object> data = jsonPath.getMap("data");
+
+		Object id2 = null;
+		Object name = null;
+
+		if (data != null) {
+			id2 = data.get("id");
+			name = data.get("name");
+
+			System.out.println("✅ ID: " + id2);
+			System.out.println("✅ Name: " + name);
+		} else {
+			System.out.println("❌ 'data' object is missing or empty in the response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status, id2, name);
+	}
+
+	/*
+	 * Executes a DELETE request to the specified endpoint with a cookie and JSON
+	 * string body.
+	 *
+	 * <p> This method constructs a DELETE request using RestAssured, setting the
+	 * <code>Content-Type</code> header to <code>application/json</code> and
+	 * attaching a cookie named <code>orangehrm</code>. The provided JSON string is
+	 * used as the request payload.
+	 *
+	 * @param endpoint the relative API endpoint to which the DELETE request is sent
+	 * 
+	 * @param cookieValue the value of the <code>orangehrm</code> cookie used for
+	 * session or authentication
+	 * 
+	 * @param body the request payload in JSON string format
+	 * 
+	 * @return the {@link io.restassured.response.Response} object representing the
+	 * server's response
+	 */
+
+	public CustomResponse deletePaygradeById(String endpoint, String cookieValue, String requestBody) {
+		RequestSpecification request = RestAssured.given().cookie("orangehrm", cookieValue).header("Content-Type",
+				"application/json");
+
+		if (requestBody != null) {
+			request.body(requestBody);
+		}
+
+		Response response = request.delete(BASE_URL + endpoint).then().extract().response();
+
+		int statusCode = response.getStatusCode();
+		String status = response.getStatusLine();
+		;
+
+		JsonPath jsonPath = response.jsonPath();
+		List<Object> dataList = jsonPath.getList("data");
+
+		System.out.println(dataList);
+
+		if (dataList != null && !dataList.isEmpty()) {
+		} else {
+			System.out.println("❌ 'data' object is missing or empty in the response. Status code: " + statusCode);
+		}
+
+		return new CustomResponse(response, statusCode, status);
 	}
 
 }
